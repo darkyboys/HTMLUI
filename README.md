@@ -32,6 +32,7 @@ sudo pacman -S gtk3 webkit2gtk                        # Arch Linux
 git clone https://github.com/darkyboys/HTMLUI.git
 cd HTMLUI
 mv HTMLUI.h ..
+cd ..
 rm -rf HTMLUI
 ```
 
