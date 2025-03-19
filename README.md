@@ -1,7 +1,7 @@
 # HTMLUI - Lightweight C++ HTML GUI Library
 
 ## Overview
-HTMLUI2 is a lightweight C++ library for creating graphical user interfaces (GUIs) using HTML, CSS, and JavaScript. It leverages GTK and WebKit to provide a seamless way to build native-like applications with web technologies. HTMLUI is designed for developers who prefer to use web-based UI components in their C++ applications while maintaining high performance and flexibility.
+HTMLUI3 is a lightweight C++ library for creating graphical user interfaces (GUIs) using HTML, CSS, and JavaScript. It leverages GTK and WebKit to provide a seamless way to build native-like applications with web technologies. HTMLUI is designed for developers who prefer to use web-based UI components in their C++ applications while maintaining high performance and flexibility.
 
 ## Why Use HTMLUI?
 - **Leverage Web Technologies**: Utilize HTML, CSS, and JavaScript to design interactive and responsive UIs.
@@ -48,6 +48,8 @@ int main() {
 }
 ```
 
+*Note You Can Also Define A Custom Path To Cookies. From where the program will read cookies.db file, with `HTMLUI ui("My App", 800, 600, "path/to/cookies.db");`*
+
 ### 3. Load HTML Content
 - **Inline HTML**
   ```cpp
@@ -87,6 +89,12 @@ ui.setWebKitSetting("webgl", true);       // Enable WebGL
 ### 7. Run the Application
 ```cpp
 ui.run();
+```
+
+### 8. Change Window Icon (X11 Support)
+For changing the window icon you can use the `setWindowIcon` function which will set the window icon for `X11` Platforms.
+```cpp
+ui.setWindowIcon("path/to/icon.png");
 ```
 
 ---

@@ -9,7 +9,7 @@
 
 class HTMLUI {
 public:
-    HTMLUI(const std::string& title, int width, int height);
+    HTMLUI(const std::string& title, int width, int height, const std::string& cookiesPath = "./cookies.db");
     ~HTMLUI();
 
     void loadHTML(const std::string& html);
@@ -20,21 +20,23 @@ public:
     void configureSettings();
     void setWebKitSetting(const std::string& setting, bool value);
     void executeJS(const std::string& script);
+    void setWindowIcon(const std::string& iconPath);
 
 private:
     GtkWidget* window;
     WebKitWebView* webView;
     WebKitSettings* settings;
     WebKitUserContentManager* contentManager;
+    WebKitWebContext* webContext;
     std::unordered_map<std::string, std::function<void(const std::string&)>> jsFunctions;
 
-    void initialize(const std::string& title, int width, int height);
+    void initialize(const std::string& title, int width, int height, const std::string& cookiesPath);
     void injectJSBridge();
     static void jsCallback(WebKitUserContentManager* manager, WebKitJavascriptResult* jsResult, gpointer userData);
 };
 
-HTMLUI::HTMLUI(const std::string& title, int width, int height) {
-    initialize(title, width, height);
+HTMLUI::HTMLUI(const std::string& title, int width, int height, const std::string& cookiesPath) {
+    initialize(title, width, height, cookiesPath);
     configureSettings();
     injectJSBridge();
 }
@@ -43,7 +45,7 @@ HTMLUI::~HTMLUI() {
     gtk_widget_destroy(window);
 }
 
-void HTMLUI::initialize(const std::string& title, int width, int height) {
+void HTMLUI::initialize(const std::string& title, int width, int height, const std::string& cookiesPath) {
     gtk_init(nullptr, nullptr);
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -51,7 +53,16 @@ void HTMLUI::initialize(const std::string& title, int width, int height) {
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
 
     contentManager = webkit_user_content_manager_new();
-    webView = WEBKIT_WEB_VIEW(webkit_web_view_new_with_user_content_manager(contentManager));
+
+    // Create a WebKitWebContext for managing cookies
+    webContext = webkit_web_context_new();
+
+    // Enable persistent cookies with custom path
+    WebKitCookieManager* cookieManager = webkit_web_context_get_cookie_manager(webContext);
+    webkit_cookie_manager_set_persistent_storage(cookieManager, cookiesPath.c_str(), WEBKIT_COOKIE_PERSISTENT_STORAGE_SQLITE);
+
+    // Create WebView with custom WebContext
+    webView = WEBKIT_WEB_VIEW(webkit_web_view_new_with_context(webContext));
 
     if (!webView) {
         g_error("Failed to initialize WebKit WebView");
@@ -67,7 +78,6 @@ void HTMLUI::initialize(const std::string& title, int width, int height) {
 
     gtk_widget_show_all(window);
 }
-
 
 void HTMLUI::configureSettings() {
     webkit_settings_set_enable_javascript(settings, TRUE);
@@ -156,6 +166,20 @@ void HTMLUI::jsCallback(WebKitUserContentManager* manager, WebKitJavascriptResul
 
 void HTMLUI::executeJS(const std::string& script) {
     webkit_web_view_evaluate_javascript(webView, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
+}
+
+void HTMLUI::setWindowIcon(const std::string& iconPath) {
+    GError* error = nullptr;
+    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file(iconPath.c_str(), &error);
+
+    if (!pixbuf) {
+        g_warning("Failed to load window icon from file: %s\nError: %s", iconPath.c_str(), error->message);
+        g_error_free(error);
+        return;
+    }
+
+    gtk_window_set_icon(GTK_WINDOW(window), pixbuf);
+    g_object_unref(pixbuf);
 }
 
 #endif // HTMLUI_H
