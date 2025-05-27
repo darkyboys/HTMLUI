@@ -1,151 +1,152 @@
-# HTMLUI - Lightweight C++ HTML GUI Library
+# HTMLUI
 
-## Overview
-HTMLUI3 is a lightweight C++ library for creating graphical user interfaces (GUIs) using HTML, CSS, and JavaScript. It leverages GTK and WebKit to provide a seamless way to build native-like applications with web technologies. HTMLUI is designed for developers who prefer to use web-based UI components in their C++ applications while maintaining high performance and flexibility.
+**HTMLUI** is a modern, lightweight C++ UI library that lets you build powerful native GUI applications using HTML, CSS, and JavaScript. It leverages GTK and WebKit2 to render HTML content and seamlessly integrate JavaScript callbacks into native C++ logic.
 
-## Why Use HTMLUI?
-- **Leverage Web Technologies**: Utilize HTML, CSS, and JavaScript to design interactive and responsive UIs.
-- **Lightweight and Fast**: Built with GTK and WebKit for efficient rendering and performance.
-- **Native Integration**: Allows bidirectional communication between JavaScript and C++.
-- **Customizable Settings**: Configure WebKit settings for better security and performance.
-- **Cross-Platform**: Works on Linux and other systems that support GTK and WebKit.
-
-## When NOT to Use HTMLUI
-- If you need a **pure native** UI without any web-based components.
-- If your application requires deep OS integration with custom widgets.
-- If you prefer a dedicated GUI framework like Qt or GTK without web dependencies.
+> Created by [ghgltggamer](https://github.com/darkyboys) — Licensed under the MIT License
 
 ---
 
-## Getting Started
+## 🚀 Features
 
-### 1. Install Dependencies & HTMLUI
-Ensure that GTK and WebKit2GTK are installed on your system.
-```sh
-sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev  # Debian-based
-sudo pacman -S gtk3 webkit2gtk                        # Arch Linux
-```
+- Render HTML and CSS in native C++ windows
+- Load HTML from strings, files, or URLs
+- Call native C++ functions from JavaScript
+- Execute JavaScript from C++
+- Fine-tune WebKit settings for performance or security
+- Auto flush queued JS when DOM is ready
+- MIT licensed and fully open-source
 
-**HTMLUI Install**
+---
+
+## 📦 Requirements
+
+- GTK 3
+- WebKit2GTK
+- C++17 or newer
+
+Install dependencies on Arch Linux:
+
 ```bash
-# Copy and paste these commands in your terminal
-git clone https://github.com/darkyboys/HTMLUI.git
-cd HTMLUI
-mv HTMLUI.h ..
-cd ..
-rm -rf HTMLUI
+sudo pacman -S gtk3 webkit2gtk
+````
+
+Or on Ubuntu/Debian:
+
+```bash
+sudo apt install libgtk-3-dev libwebkit2gtk-4.0-dev
 ```
 
+---
 
-### 2. Initialize an HTMLUI Application
+## 🔧 Build Instructions
+
+You can build your application with any build system. Example using `g++`:
+
+```bash
+g++ main.cpp -o app `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0`
+```
+
+---
+
+## ✨ Basic Example
+
 ```cpp
 #include "htmlui.h"
 
 int main() {
-    HTMLUI ui("My App", 800, 600);
-    ui.run();
-    return 0;
+    HTMLUI app("My HTMLUI App", 800, 600);
+    app.loadFile("index.html");
+
+    app.registerFunction("sayHello", [](const std::string& name) {
+        std::cout << "Hello, " << name << "!" << std::endl;
+    });
+
+    app.run();
 }
 ```
 
-*Note You Can Also Define A Custom Path To Cookies. From where the program will read cookies.db file, with `HTMLUI ui("My App", 800, 600, "path/to/cookies.db");`*
+Then in your `index.html`:
 
-### 3. Load HTML Content
-- **Inline HTML**
-  ```cpp
-  ui.loadHTML("<h1>Hello, HTMLUI!</h1>");
-  ```
-- **Load from File**
-  ```cpp
-  ui.loadFile("/path/to/file.html");
-  ```
-- **Load from URL**
-  ```cpp
-  ui.loadURL("https://example.com");
-  ```
-
-### 4. Register a Native Function
-```cpp
-ui.registerFunction("showMessage", [](const std::string& message) {
-    std::cout << "Message from JS: " << message << std::endl;
-});
+```html
+<button onclick="sayHello('World')">Click Me</button>
 ```
-This function can be called from JavaScript as:
+
+---
+
+## 📘 API Documentation
+
+### `HTMLUI(const std::string& title, int width, int height)`
+
+Creates a new window with the given title and dimensions.
+
+### `void loadHTML(const std::string& html)`
+
+Loads raw HTML content into the window.
+
+### `void loadFile(const std::string& filepath)`
+
+Loads a local `.html` file using a full or relative path.
+
+### `void loadURL(const std::string& url)`
+
+Loads a remote or local URL (e.g., `http://example.com` or `file:///path/to/file.html`).
+
+### `void run()`
+
+Starts the GTK main loop.
+
+### `void registerFunction(const std::string& functionName, std::function<void(const std::string&)> callback)`
+
+Exposes a C++ function to JavaScript with a given name. JavaScript can then call `window.functionName(arg)`.
+
+### `void executeJS(const std::string& script)`
+
+Executes a JavaScript string. If DOM isn't ready yet, it will be queued and run after load.
+
+### `void setWebKitSetting(const std::string& setting, bool value)`
+
+Changes WebKit settings dynamically.
+
+Supported `setting` strings:
+
+* `"javascript"`
+* `"developer_extras"`
+* `"webgl"`
+* `"file_access"`
+* `"universal_access"`
+* `"resizable_text_areas"`
+* `"smooth_scrolling"`
+
+---
+
+## 🧠 JavaScript Bridge
+
+You can invoke C++ functions from JS like so:
+
 ```js
-window.showMessage("Hello from JavaScript!");
+window.nativeBridge.invoke ("sayHello", "yourargs");
 ```
 
-### 5. Execute JavaScript from C++
-```cpp
-ui.executeJS("document.body.style.backgroundColor = 'lightblue';");
+Behind the scenes, HTMLUI injects:
+
+```js
+window.nativeBridge = {
+    invoke: function(funcName, arg) {
+        window.webkit.messageHandlers.nativeCallback.postMessage(funcName + ':' + arg);
+    }
+};
 ```
 
-### 6. Configure WebKit Settings
-```cpp
-ui.setWebKitSetting("javascript", true);  // Enable JavaScript
-ui.setWebKitSetting("webgl", true);       // Enable WebGL
-```
-
-### 7. Run the Application
-```cpp
-ui.run();
-```
-
-### 8. Change Window Icon (X11 Support)
-For changing the window icon you can use the `setWindowIcon` function which will set the window icon for `X11` Platforms.
-```cpp
-ui.setWindowIcon("path/to/icon.png");
-```
+When you register a function in C++, it's automatically exposed to JS.
 
 ---
 
-## API Reference
+## 🪪 License
 
-### Constructor
-```cpp
-HTMLUI(const std::string& title, int width, int height);
-```
-Creates an application window with the given title and size.
-
-### Load Content
-```cpp
-void loadHTML(const std::string& html);
-void loadFile(const std::string& filepath);
-void loadURL(const std::string& url);
-```
-Loads an HTML string, file, or URL into the WebView.
-
-### JavaScript Integration
-```cpp
-void registerFunction(const std::string& functionName, std::function<void(const std::string&)> callback);
-void executeJS(const std::string& script);
-```
-Registers a C++ function that can be called from JavaScript and executes JavaScript code from C++.
-
-### WebKit Settings
-```cpp
-void setWebKitSetting(const std::string& setting, bool value);
-```
-Configures WebKit settings such as JavaScript, WebGL, and file access.
-
-### Application Control
-```cpp
-void run();
-```
-Starts the GTK main loop, running the application.
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT).
 
 ---
 
-## Compilation
-Compile and link against GTK and WebKit:
-```sh
-g++ -o myapp main.cpp `pkg-config --cflags --libs gtk+-3.0 webkit2gtk-4.0`
-```
+## 🔗 Links
 
-## License
-MIT License. Feel free to use and modify HTMLUI as needed.
-
-## Contribution
-Please read the [Guidelines](CONTRIBUTING.md) for more information
-
-Copyright (c) ghgltggamers
+* GitHub: [https://github.com/darkyboys/HTMLUI](https://github.com/darkyboys/HTMLUI)
