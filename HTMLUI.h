@@ -1,3 +1,12 @@
+/*
+    * Copyright (c) ghgltggamer 2025
+    * Written by ghgltggamer
+    * HTMLUI a UI library for making html powered C++ Apps
+    * Licensed under the MIT License
+    * Checkout the README.md for more information
+    * Checkout the GitHub Repo : https://github.com/darkyboys/HTMLUI
+*/
+
 #ifndef HTMLUI_H
 #define HTMLUI_H
 
@@ -5,11 +14,13 @@
 #include <webkit2/webkit2.h>
 #include <functional>
 #include <unordered_map>
+#include <vector>
 #include <string>
+#include <iostream>
 
 class HTMLUI {
 public:
-    HTMLUI(const std::string& title, int width, int height, const std::string& cookiesPath = "./cookies.db");
+    HTMLUI(const std::string& title, int width, int height);
     ~HTMLUI();
 
     void loadHTML(const std::string& html);
@@ -20,23 +31,28 @@ public:
     void configureSettings();
     void setWebKitSetting(const std::string& setting, bool value);
     void executeJS(const std::string& script);
-    void setWindowIcon(const std::string& iconPath);
+
+    std::string lastDriveData;
 
 private:
     GtkWidget* window;
     WebKitWebView* webView;
     WebKitSettings* settings;
     WebKitUserContentManager* contentManager;
-    WebKitWebContext* webContext;
-    std::unordered_map<std::string, std::function<void(const std::string&)>> jsFunctions;
 
-    void initialize(const std::string& title, int width, int height, const std::string& cookiesPath);
+    std::unordered_map<std::string, std::function<void(const std::string&)>> jsFunctions;
+    std::vector<std::string> jsQueue;
+    bool domReady = false;
+
+    void initialize(const std::string& title, int width, int height);
     void injectJSBridge();
+    void flushJSQueue();
+
     static void jsCallback(WebKitUserContentManager* manager, WebKitJavascriptResult* jsResult, gpointer userData);
 };
 
-HTMLUI::HTMLUI(const std::string& title, int width, int height, const std::string& cookiesPath) {
-    initialize(title, width, height, cookiesPath);
+HTMLUI::HTMLUI(const std::string& title, int width, int height) {
+    initialize(title, width, height);
     configureSettings();
     injectJSBridge();
 }
@@ -45,7 +61,7 @@ HTMLUI::~HTMLUI() {
     gtk_widget_destroy(window);
 }
 
-void HTMLUI::initialize(const std::string& title, int width, int height, const std::string& cookiesPath) {
+void HTMLUI::initialize(const std::string& title, int width, int height) {
     gtk_init(nullptr, nullptr);
 
     window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -53,28 +69,31 @@ void HTMLUI::initialize(const std::string& title, int width, int height, const s
     gtk_window_set_default_size(GTK_WINDOW(window), width, height);
 
     contentManager = webkit_user_content_manager_new();
-
-    // Create a WebKitWebContext for managing cookies
-    webContext = webkit_web_context_new();
-
-    // Enable persistent cookies with custom path
-    WebKitCookieManager* cookieManager = webkit_web_context_get_cookie_manager(webContext);
-    webkit_cookie_manager_set_persistent_storage(cookieManager, cookiesPath.c_str(), WEBKIT_COOKIE_PERSISTENT_STORAGE_SQLITE);
-
-    // Create WebView with custom WebContext
-    webView = WEBKIT_WEB_VIEW(webkit_web_view_new_with_context(webContext));
+    webView = WEBKIT_WEB_VIEW(webkit_web_view_new_with_user_content_manager(contentManager));
 
     if (!webView) {
         g_error("Failed to initialize WebKit WebView");
     }
 
     gtk_container_add(GTK_CONTAINER(window), GTK_WIDGET(webView));
-
     settings = webkit_web_view_get_settings(webView);
 
     g_signal_connect(window, "destroy", G_CALLBACK(gtk_main_quit), nullptr);
     g_signal_connect(contentManager, "script-message-received::nativeCallback", G_CALLBACK(jsCallback), this);
     webkit_user_content_manager_register_script_message_handler(contentManager, "nativeCallback");
+
+    // Hook load-changed to detect DOM readiness
+    g_signal_connect(webView, "load-changed", G_CALLBACK(+[](
+        WebKitWebView* web_view,
+        WebKitLoadEvent load_event,
+        gpointer user_data
+    ) {
+        if (load_event == WEBKIT_LOAD_FINISHED) {
+            HTMLUI* self = static_cast<HTMLUI*>(user_data);
+            self->domReady = true;
+            self->flushJSQueue();
+        }
+    }), this);
 
     gtk_widget_show_all(window);
 }
@@ -117,19 +136,30 @@ void HTMLUI::injectJSBridge() {
     )";
 
     WebKitUserScript* script = webkit_user_script_new(
-        jsBridgeScript, WEBKIT_USER_CONTENT_INJECT_TOP_FRAME, WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START, nullptr, nullptr);
+        jsBridgeScript,
+        WEBKIT_USER_CONTENT_INJECT_TOP_FRAME,
+        WEBKIT_USER_SCRIPT_INJECT_AT_DOCUMENT_START,
+        nullptr, nullptr
+    );
+
     webkit_user_content_manager_add_script(contentManager, script);
 }
 
 void HTMLUI::loadHTML(const std::string& html) {
+    domReady = false;  // reset DOM state
+    jsQueue.clear();   // clear JS queue for new page
     webkit_web_view_load_html(webView, html.c_str(), nullptr);
 }
 
 void HTMLUI::loadFile(const std::string& filepath) {
+    domReady = false;
+    jsQueue.clear();
     webkit_web_view_load_uri(webView, ("file://" + filepath).c_str());
 }
 
 void HTMLUI::loadURL(const std::string& url) {
+    domReady = false;
+    jsQueue.clear();
     webkit_web_view_load_uri(webView, url.c_str());
 }
 
@@ -137,6 +167,29 @@ void HTMLUI::registerFunction(const std::string& functionName, std::function<voi
     jsFunctions[functionName] = callback;
     std::string jsExpose = "window." + functionName + " = function(arg) { window.nativeBridge.invoke('" + functionName + "', arg); };";
     executeJS(jsExpose);
+}
+
+void HTMLUI::executeJS(const std::string& script) {
+    if (!domReady) {
+        jsQueue.push_back(script);
+        return;
+    }
+
+    webkit_web_view_evaluate_javascript(
+        webView, script.c_str(), script.length(),
+        nullptr, nullptr, nullptr, nullptr, nullptr
+    );
+}
+
+void HTMLUI::flushJSQueue() {
+    for (const std::string& js : jsQueue) {
+        std::cout << "[JS Flush] " << js << '\n';
+        webkit_web_view_evaluate_javascript(
+            webView, js.c_str(), js.length(),
+            nullptr, nullptr, nullptr, nullptr, nullptr
+        );
+    }
+    jsQueue.clear();
 }
 
 void HTMLUI::run() {
@@ -162,24 +215,6 @@ void HTMLUI::jsCallback(WebKitUserContentManager* manager, WebKitJavascriptResul
             }
         }
     }
-}
-
-void HTMLUI::executeJS(const std::string& script) {
-    webkit_web_view_evaluate_javascript(webView, script.c_str(), -1, nullptr, nullptr, nullptr, nullptr, nullptr);
-}
-
-void HTMLUI::setWindowIcon(const std::string& iconPath) {
-    GError* error = nullptr;
-    GdkPixbuf* pixbuf = gdk_pixbuf_new_from_file(iconPath.c_str(), &error);
-
-    if (!pixbuf) {
-        g_warning("Failed to load window icon from file: %s\nError: %s", iconPath.c_str(), error->message);
-        g_error_free(error);
-        return;
-    }
-
-    gtk_window_set_icon(GTK_WINDOW(window), pixbuf);
-    g_object_unref(pixbuf);
 }
 
 #endif // HTMLUI_H
